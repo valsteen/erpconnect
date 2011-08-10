@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import xmlrpclib
+from operator import itemgetter
 
 class OpenERP(object):
     def __init__(self, host, db, login, password):
@@ -36,7 +37,15 @@ class OpenERP(object):
             def raw_search(self, *domain, **params):
                 context = params.get("context", {})
                 context = openerp.get_context(context)
-                return openerp.execute(openobject, 'search', domain, params.get("offset",0), params.get("limit", False), params.get("order",False), context)
+                def tolist(conditions):
+                    res = []
+                    for condition in conditions:
+                        if isinstance(condition, Condition):
+                            condition = tolist(condition)
+                        res.append(condition)
+                    return res
+                    
+                return openerp.execute(openobject, 'search', tolist(domain), params.get("offset",0), params.get("limit", False), params.get("order",False), context)
 
             def read(self, ids, fields=False, context=None):
                 context = openerp.get_context(context)
@@ -44,8 +53,7 @@ class OpenERP(object):
                 query = self
                 class UpdatableList(list):
                     def write(self, changes):
-                        ids = [item['id'] for item in res]
-                        return query.write(ids, changes)
+                        return query.write(itemgetter('id', res), changes)
 
                 res = openerp.execute(openobject, 'read', ids, fields, context)
 
@@ -74,6 +82,10 @@ class OpenERP(object):
                 context = openerp.get_context(context)
                 return openerp.execute(openobject, 'write', ids, changes, context)
 
+            def create(self, values, context=None):
+                context = openerp.get_context(context)
+                return openerp.execute(openobject, 'create', values, context)
+
             __foreignkeys = {}
             def __setitem__(self, column, value):
                 self.__foreignkeys[column] = value
@@ -81,3 +93,47 @@ class OpenERP(object):
         query = Query()
         self.queries[openobject] = query
         return query
+
+    _modules = {}
+    def __getattribute__(self, modulename):
+        try:
+            return super(OpenERP, self).__getattribute__(modulename)
+        except:
+            me = self
+            class ModelGetter(object):
+                def __getattribute__(self, modelname):
+                    return me[modulename + "." + modelname]
+
+            if modulename not in self._modules:
+                self._modules[modulename] = ModelGetter()
+
+            return self._modules[modulename]
+
+class F(object):
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self):
+        return self.name
+
+    def __lt__(self, name):
+        return Condition([self.name,"<",name])
+
+    def __gt__(self, name):
+        return Condition([self.name,">",name])
+
+    def __eq__(self, name):
+        return Condition([self.name,"=",name])
+
+    def __ne__(self, name):
+        return Condition([self.name,"<>",name])
+
+    def like(self, name):
+        return Condition([self.name, "like", name])
+
+class Condition(list):
+    def __and__(self, condition):
+        return ["&", self, condition]
+
+    def __or__(self, condition):
+        return ["|", self, condition]
