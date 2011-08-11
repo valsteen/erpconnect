@@ -9,6 +9,8 @@ class OpenERP(object):
         self.password = password
         sock_common = xmlrpclib.ServerProxy ('http://%s:8069/xmlrpc/common' % host)
         self.uid = sock_common.login(db, login, password)
+        self.queries = {}
+        self._modules = {}
 
         self.sock = xmlrpclib.ServerProxy('http://%s:8069/xmlrpc/object' % host)
 
@@ -25,27 +27,31 @@ class OpenERP(object):
         all_params.extend(params)
         return self.sock.execute(*all_params, **argv)
 
-    queries = {}
     def __getitem__(self, openobject):
         if openobject in self.queries: return self.queries[openobject]
         openerp = self
         
         class Query(object):
+            def __init__(self):
+                self.__foreignkeys = {}
+                super(Query, self).__init__()
+
             def execute(self, command, *params, **argv):
                 return openerp.execute(openobject, command, *params, **argv)
 
-            def raw_search(self, *domain, **params):
+            def _tolist(self, conditions):
+                res = []
+                for condition in conditions:
+                    if isinstance(condition, list):
+                        condition = self._tolist(condition)
+                    res.append(condition)
+                return res
+
+            def raw_search(self, domain, **params):
                 context = params.get("context", {})
                 context = openerp.get_context(context)
-                def tolist(conditions):
-                    res = []
-                    for condition in conditions:
-                        if isinstance(condition, Condition):
-                            condition = tolist(condition)
-                        res.append(condition)
-                    return res
                     
-                return openerp.execute(openobject, 'search', tolist(domain), params.get("offset",0), params.get("limit", False), params.get("order",False), context)
+                return openerp.execute(openobject, 'search', self._tolist(domain), params.get("offset",0), params.get("limit", False), params.get("order",False), context)
 
             def read(self, ids, fields=False, context=None):
                 context = openerp.get_context(context)
@@ -72,11 +78,16 @@ class OpenERP(object):
                     
                 return UpdatableList(res)
 
-            def search(self, *domain, **params):
+            def search(self, domain, **params):
                 context = params.pop("context", {})
                 context = openerp.get_context(context)
                 fields = params.pop("fields", False)
-                return self.read(self.raw_search(*domain, context=context, **params), fields, context)
+                return self.read(self.raw_search(domain, context=context, **params), fields, context)
+
+            def count(self, domain, **params):
+                context = params.pop("context", {})
+                context = openerp.get_context(context)
+                return openerp.execute(openobject, 'search', self._tolist(domain), params.get("offset",0), params.get("limit", False), params.get("order",False), context, True)
 
             def write(self, ids, changes, context=None):
                 context = openerp.get_context(context)
@@ -86,7 +97,6 @@ class OpenERP(object):
                 context = openerp.get_context(context)
                 return openerp.execute(openobject, 'create', values, context)
 
-            __foreignkeys = {}
             def __setitem__(self, column, value):
                 self.__foreignkeys[column] = value
 
@@ -94,7 +104,6 @@ class OpenERP(object):
         self.queries[openobject] = query
         return query
 
-    _modules = {}
     def __getattribute__(self, modulename):
         try:
             return super(OpenERP, self).__getattribute__(modulename)
@@ -133,7 +142,13 @@ class F(object):
 
 class Condition(list):
     def __and__(self, condition):
-        return ["&", self, condition]
+        if self[0] in "&":
+            return Condition(self + [Condition(condition)])
+        else:
+            return Condition(["&", self, condition])
 
     def __or__(self, condition):
-        return ["|", self, condition]
+        if self[0] in "|":
+            return Condition(self + [Condition(condition)])
+        else:
+            return Condition(["|", self, condition])
