@@ -59,7 +59,7 @@ class OpenERP(object):
                 query = self
                 class UpdatableList(list):
                     def write(self, changes):
-                        return query.write(itemgetter('id', res), changes)
+                        return query.write(map(itemgetter('id'), res), changes)
 
                 res = openerp.execute(openobject, 'read', ids, fields, context)
 
@@ -78,7 +78,7 @@ class OpenERP(object):
                     
                 return UpdatableList(res)
 
-            def search(self, domain, **params):
+            def search(self, domain=[], **params):
                 context = params.pop("context", {})
                 context = openerp.get_context(context)
                 fields = params.pop("fields", False)
@@ -99,6 +99,13 @@ class OpenERP(object):
 
             def __setitem__(self, column, value):
                 self.__foreignkeys[column] = value
+
+            def __getattribute__(self, name):
+                try:
+                    return super(Query, self).__getattribute__(name)
+                except:
+                    return openerp[openobject + "." + name]
+                
 
         query = Query()
         self.queries[openobject] = query
@@ -132,10 +139,16 @@ class F(object):
         return Condition([self.name,">",name])
 
     def __eq__(self, name):
-        return Condition([self.name,"=",name])
+        if isinstance(name, (list, tuple)):
+            return Condition([self.name,"in",name])
+        else:
+            return Condition([self.name,"=",name])
 
     def __ne__(self, name):
-        return Condition([self.name,"<>",name])
+        if isinstance(name, (list, tuple)):
+            return Condition([self.name,"not in",name])
+        else:
+            return Condition([self.name,"<>",name])
 
     def like(self, name):
         return Condition([self.name, "like", name])
