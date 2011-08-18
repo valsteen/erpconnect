@@ -61,6 +61,9 @@ class OpenERP(object):
                     def write(self, changes):
                         return query.write(map(itemgetter('id'), res), changes)
 
+                    def unlink(self, changes):
+                        return query.unlink(map(itemgetter('id'), res))
+
                 res = openerp.execute(openobject, 'read', ids, fields, context)
 
                 if res:
@@ -84,7 +87,7 @@ class OpenERP(object):
                 fields = params.pop("fields", False)
                 return self.read(self.raw_search(domain, context=context, **params), fields, context)
 
-            def count(self, domain, **params):
+            def count(self, domain=[], **params):
                 context = params.pop("context", {})
                 context = openerp.get_context(context)
                 return openerp.execute(openobject, 'search', self._tolist(domain), params.get("offset",0), params.get("limit", False), params.get("order",False), context, True)
@@ -92,6 +95,10 @@ class OpenERP(object):
             def write(self, ids, changes, context=None):
                 context = openerp.get_context(context)
                 return openerp.execute(openobject, 'write', ids, changes, context)
+
+            def unlink(self, ids, context=None):
+                context = openerp.get_context(context)
+                return openerp.execute(openobject, 'unlink', ids, context)
 
             def create(self, values, context=None):
                 context = openerp.get_context(context)
