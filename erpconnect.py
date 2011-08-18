@@ -61,7 +61,7 @@ class OpenERP(object):
                     def write(self, changes):
                         return query.write(map(itemgetter('id'), res), changes)
 
-                    def unlink(self, changes):
+                    def unlink(self):
                         return query.unlink(map(itemgetter('id'), res))
 
                 res = openerp.execute(openobject, 'read', ids, fields, context)
