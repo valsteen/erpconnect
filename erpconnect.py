@@ -140,7 +140,7 @@ class Query(object):
                     self.__foreignkeys[field["name"]] = field["relation"]
         
         
-    def read(self, ids, fields=False, context=None):
+    def read(self, ids, fields=False, context=None, as_dict=False):
         self.__foreignkeys__()
         context = self._openerp.get_context(context)
 
@@ -166,14 +166,19 @@ class Query(object):
                         else: rec[column] = False
                     else:
                         rec[column] = self._openerp[model].read(rec[column])
-            
+        
+        if as_dict:
+            field = isinstance(as_dict, basestring) and as_dict or "id"
+            return dict((i["id"], i) for i in res)
+
         return UpdatableList(res)
 
     def search(self, domain=[], **params):
         context = params.pop("context", {})
         context = self._openerp.get_context(context)
+        as_dict = params.pop("as_dict", False)
         fields = params.pop("fields", False)
-        return self.read(self.raw_search(domain, context=context, **params), fields, context)
+        return self.read(self.raw_search(domain, context=context, **params), fields, context, as_dict=as_dict)
 
     def count(self, domain=[], **params):
         context = params.pop("context", {})
@@ -200,7 +205,6 @@ class Query(object):
             return super(Query, self).__getattribute__(name)
         except:
             return self._openerp[self._openobject + "." + name]
-                
 
 class Condition(list):
     def __and__(self, condition):
