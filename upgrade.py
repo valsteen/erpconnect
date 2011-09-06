@@ -8,10 +8,12 @@ parser = argparse.ArgumentParser(description='upgrades the specified app on host
 parser.add_argument('applications', type=str, nargs='+')
 parser.add_argument('--host', type=str, default="localhost")
 parser.add_argument('--dbname', type=str, default=dbname)
+parser.add_argument('--login', type=str, default=username)
+parser.add_argument('--password', type=str, default=pwd)
 args = parser.parse_args()
 
 from erpconnect import OpenERP, F
-cx = OpenERP(args.host, args.dbname, username, pwd)
+cx = OpenERP(args.host, args.dbname, args.login, args.password)
 modules = cx.ir.module.module.search([F("name")==args.applications])
 notfound = set(args.applications) - set(map(itemgetter("name"), modules))
 if notfound:
