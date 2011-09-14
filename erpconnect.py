@@ -140,7 +140,7 @@ class Query(object):
                     self.__foreignkeys[field["name"]] = field["relation"]
         
         
-    def read(self, ids, fields=False, context=None, as_dict=False):
+    def read(self, ids, fields=False, context=None, as_dict=False, with_audit=False):
         self.__foreignkeys__()
         context = self._openerp.get_context(context)
 
@@ -154,7 +154,14 @@ class Query(object):
 
         res = self._openerp.execute(self._openobject, 'read', ids, fields, context)
 
+        if with_audit:
+            audit_res = dict((rec["id"], rec) for rec in self._openerp.execute(self._openobject, 'perm_read', ids, context, False))
+
         if res:
+            if with_audit:
+                for rec in res:
+                    rec.update(audit_res.get(rec["id"],{}))
+
             for column, model in self.__foreignkeys.items():
                 if column not in res[0]: continue
 
@@ -177,8 +184,9 @@ class Query(object):
         context = params.pop("context", {})
         context = self._openerp.get_context(context)
         as_dict = params.pop("as_dict", False)
+        with_audit = params.pop("with_audit", False)
         fields = params.pop("fields", False)
-        return self.read(self.raw_search(domain, context=context, **params), fields, context, as_dict=as_dict)
+        return self.read(self.raw_search(domain, context=context, **params), fields, context, as_dict=as_dict, with_audit=with_audit)
 
     def count(self, domain=[], **params):
         context = params.pop("context", {})
